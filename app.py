@@ -1,32 +1,26 @@
 import streamlit as st
-from api_utils import search_anime, search_game
+from recommender import ContentRecommender
 
-st.set_page_config(page_title="Recommandation Animes & Jeux")
+# Charger le modèle
+model = ContentRecommender("data.csv")
 
-st.title("🎌 Système de Recommandation")
-st.markdown("Recommande des **animes** ou des **jeux vidéo** en se basant sur les titres recherchés.")
+# Titre et description
+st.set_page_config(page_title="Système de recommandation IA")
+st.title("🎌 Système de recommandation d’animes et de jeux vidéo")
+st.markdown("Ce système utilise un modèle basé sur le contenu avec IA (TF-IDF + cosine similarity).")
 
-media_type = st.radio("Type :", ["Anime", "Jeu vidéo"])
-query = st.text_input("Quel titre aimes-tu ?")
+# Entrée utilisateur
+media_type = st.radio("Type :", ["anime", "game"])
+title = st.text_input("Entre le nom d’un anime ou d’un jeu que tu aimes :")
 
-api_key = ""
-if media_type == "Jeu vidéo":
-    api_key = st.text_input("Clé API RAWG (gratuite)", type="password")
-
-if st.button("Rechercher") and query:
-    if media_type == "Anime":
-        results = search_anime(query)
+if st.button("Recommander") and title:
+    results = model.recommend(title, media_type)
+    
+    if isinstance(results, str):
+        st.warning(results)
     else:
-        if not api_key:
-            st.warning("Entre ta clé API RAWG.io")
-            st.stop()
-        results = search_game(query, api_key)
-
-    if results:
-        st.success("Voici les résultats :")
-        for item in results:
-            st.write("🎯", item)
-    else:
-        st.warning("Aucun résultat trouvé.")
+        st.success("Voici les recommandations :")
+        for i, item in enumerate(results, start=1):
+            st.write(f"**{i}.** {item}")
 
 
