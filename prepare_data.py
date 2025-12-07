@@ -1,7 +1,8 @@
 # prepare_data.py
 import pandas as pd
 
-df = pd.read_csv("anime.csv")
+df = pd.read_csv("data/anime.csv")
+
 
 # On garde les colonnes utiles
 cols_to_keep = ["name", "genre", "type", "rating"]
