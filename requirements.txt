@@ -1,13 +1,5 @@
-<<<<<<< HEAD
 pandas
 scikit-learn
 streamlit
+sentence-transformers
 
-
-=======
-pandas
-scikit-learn
-streamlit
-
-
->>>>>>> ec24e0462118fc3ad771a154cf204d84100a1919
