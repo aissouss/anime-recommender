@@ -1,94 +1,90 @@
 # app.py
-
 import streamlit as st
+
 from src.recommender import TfidfRecommender, EmbeddingRecommender
 
-st.set_page_config(
-    page_title="Anime Recommender",
-    page_icon="🎌",
-    layout="wide",
-)
+DATA_PATH = "data/anime_clean.csv"
+
+st.set_page_config(page_title="Anime Recommender", page_icon="🎌", layout="wide")
 
 st.title("🎌 Système de recommandation d'animes")
-st.markdown(
-    """
-Ce projet propose des recommandations d'animes basées sur leur contenu.
-
-- **TF-IDF** : modèle classique basé sur les genres / texte
-- **BERT embeddings** : modèle plus avancé utilisant des représentations sémantiques
-"""
+st.caption(
+    "Recommandation basée contenu : TF-IDF (rapide) ou embeddings de phrases (sémantique)."
 )
 
-@st.cache_resource
-def load_tfidf_model():
-    return TfidfRecommender("data/anime_clean.csv")
 
-@st.cache_resource
-def load_embedding_model():
-    return EmbeddingRecommender("data/anime_clean.csv")
+@st.cache_resource(show_spinner=False)
+def load_model(kind: str):
+    """Le modèle est construit une seule fois, puis réutilisé entre les reruns."""
+    if kind == "TF-IDF":
+        return TfidfRecommender(DATA_PATH)
+    return EmbeddingRecommender(DATA_PATH)
 
 
-# Sélection du modèle
-model_type = st.radio(
-    "Choisis le modèle :",
-    ["TF-IDF (rapide)", "BERT embeddings (plus avancé)"],
+kind = st.radio(
+    "Modèle :",
+    ["TF-IDF", "Embeddings (BERT)"],
     horizontal=True,
+    help="TF-IDF compare les mots ; les embeddings comparent le sens.",
 )
+kind = "TF-IDF" if kind == "TF-IDF" else "BERT"
 
-# Chargement du modèle
-with st.spinner("Chargement du modèle..."):
-    if model_type.startswith("TF-IDF"):
-        model = load_tfidf_model()
-        current_model_name = "TF-IDF"
-    else:
-        model = load_embedding_model()
-        current_model_name = "BERT"
+try:
+    with st.spinner(f"Chargement du modèle {kind}…"):
+        model = load_model(kind)
+except ImportError as exc:
+    # Dépendance manquante : on le dit clairement au lieu de planter.
+    st.error(f"Modèle indisponible : {exc}")
+    st.stop()
+except FileNotFoundError:
+    st.error(f"Fichier introuvable : {DATA_PATH}. Lance d'abord `python prepare_data.py`.")
+    st.stop()
 
-# Sélection du type
-types = model.available_types()
-col1, col2 = st.columns([2, 1])
+col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
-    title = st.text_input("Entre le nom d'un anime que tu aimes :")
+    title = st.text_input("Un anime que tu aimes :", placeholder="Cowboy Bebop")
 with col2:
-    selected_type = st.selectbox("Filtrer par type :", types)
+    selected_type = st.selectbox("Type :", model.available_types())
+with col3:
+    top_n = st.number_input("Résultats :", min_value=3, max_value=20, value=5)
 
-top_n = st.slider("Nombre de recommandations :", min_value=3, max_value=15, value=5)
+search = st.button("🔍 Recommander", type="primary")
 
-if st.button("🔍 Recommander") and title:
-    with st.spinner("Recherche des recommandations..."):
-        output = model.recommend(title, type_filter=selected_type, top_n=top_n)
+# On stocke la sortie en session : sinon le moindre changement de widget
+# relance le script et efface les résultats affichés.
+if search and title.strip():
+    st.session_state["output"] = model.recommend(title, selected_type, int(top_n))
+elif search:
+    st.warning("Entre d'abord le nom d'un anime.")
 
-    if "error" in output:
-        st.warning(output["error"])
-        if output["suggestions"]:
-            st.info("Suggestions possibles : " + ", ".join(output["suggestions"]))
-    else:
-        st.success(f"Voici les recommandations ({current_model_name}) :")
+output = st.session_state.get("output")
 
-        results = output["results"]
-
-        for item in results:
-            with st.container():
-                st.markdown(
-                    f"""
-                    <div style="
-                        border-radius: 10px;
-                        padding: 12px;
-                        margin-bottom: 8px;
-                        border: 1px solid #444;
-                        background-color: #11111110;
-                    ">
-                        <h4 style="margin-bottom:4px;">{item['name']}</h4>
-                        <p style="margin:0;">
-                            <b>Type :</b> {item['type']} &nbsp; | 
-                            <b>Note moyenne :</b> {item['rating']:.2f} / 10 &nbsp; | 
-                            <b>Score de similarité :</b> {item['score']:.3f}
-                        </p>
-                        <p style="margin-top:4px;">
-                            <b>Genres :</b> {item['genre']}
-                        </p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+if output and "error" in output:
+    st.warning(output["error"])
+    if output["suggestions"]:
+        st.caption("Tu voulais peut-être dire :")
+        for i, suggestion in enumerate(output["suggestions"]):
+            if st.button(suggestion, key=f"sugg_{i}"):
+                st.session_state["output"] = model.recommend(
+                    suggestion, selected_type, int(top_n)
                 )
+                st.rerun()
 
+elif output:
+    st.success(f"Animes similaires à **{output['query']}** ({kind})")
+
+    for item in output["results"]:
+        with st.container(border=True):
+            left, right = st.columns([4, 1])
+            with left:
+                # Pas de HTML brut : Streamlit échappe le contenu, donc un titre
+                # contenant < ou & ne casse pas la mise en page.
+                st.subheader(item["name"], anchor=False)
+                st.caption(f"{item['type']} · {item['genre']}")
+            with right:
+                note = "N/A" if item["rating"] is None else f"{item['rating']:.2f}/10"
+                st.metric("Note", note)
+                st.progress(
+                    min(max(item["score"], 0.0), 1.0),
+                    text=f"similarité {item['score']:.2f}",
+                )

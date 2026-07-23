@@ -1,5 +1,8 @@
-pandas
-scikit-learn
-streamlit
-sentence-transformers
+pandas>=2.0,<3.0
+numpy>=1.24
+scikit-learn>=1.3
+streamlit>=1.30
 
+# Optionnel : modèle sémantique. Tire torch (~1 Go), à retirer si tu déploies
+# sur Streamlit Cloud (offre gratuite) ou si seul TF-IDF t'intéresse.
+sentence-transformers>=2.2
